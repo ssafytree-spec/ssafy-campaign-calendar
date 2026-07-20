@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>접속코드 해시 생성기</title>
+<style>
+  body { font-family: sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; }
+  input { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; margin-bottom: 12px; }
+  button { padding: 10px 20px; font-size: 15px; cursor: pointer; }
+  .result { margin-top: 20px; padding: 14px; background: #f1f9e4; border-radius: 8px; word-break: break-all; font-family: monospace; }
+  .label { color: #666; font-size: 13px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+  <h2>접속코드 해시 생성기</h2>
+  <p>새 접속코드를 입력하면 해시값이 나옵니다. 이 값을 <code>config.js</code>의 <code>ACCESS_CODE_HASH</code>에 붙여넣으세요.</p>
+  <input id="code" placeholder="새 접속코드 입력" autofocus />
+  <button onclick="run()">해시 생성</button>
+  <div id="out"></div>
+
+  <script>
+    async function run() {
+      const code = document.getElementById('code').value.trim();
+      if (!code) { alert('접속코드를 입력하세요.'); return; }
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+      const hex = [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+      document.getElementById('out').innerHTML =
+        '<div class="result"><div class="label">이 값을 config.js의 ACCESS_CODE_HASH에 붙여넣으세요:</div>' + hex + '</div>';
+    }
+    document.getElementById('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+  </script>
+</body>
+</html>
