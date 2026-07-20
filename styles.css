@@ -603,3 +603,10 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 상단바 복원 버튼 (label을 버튼처럼) */
+.upload-inline {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}

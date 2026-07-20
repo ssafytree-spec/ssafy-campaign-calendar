@@ -1280,6 +1280,26 @@ async function exportBackup() {
   URL.revokeObjectURL(url);
 }
 
+// ---- 백업 복원 (JSON 업로드) ------------------------------------------
+const RESTORE_ORDER = [
+  "campaigns", "tasks", "task_logs", "task_files",
+  "events", "staff_assignments", "timeline_items",
+  "messages", "message_logs", "message_files",
+];
+async function restoreBackup(file) {
+  const text = await file.text();
+  let backup;
+  try { backup = JSON.parse(text); }
+  catch (e) { throw new Error("파일을 읽을 수 없습니다. 올바른 백업 JSON 파일인지 확인하세요."); }
+
+  for (const t of RESTORE_ORDER) {
+    const rows = backup[t];
+    if (!rows || !rows.length) continue;
+    const { error } = await supabase.from(t).upsert(rows, { onConflict: "id" });
+    if (error) throw new Error(`"${t}" 복원 중 오류: ${error.message}`);
+  }
+}
+
 // ---- 최상위 앱 -----------------------------------------------------
 const TABS = [
   { key: "board", label: "현황판" },
@@ -1358,6 +1378,28 @@ function App() {
     setBusy("");
   };
 
+  const handleRestore = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const ok = confirm(
+      "백업 파일의 데이터를 복원할까요?\n\n" +
+      "・기존 항목은 백업 시점 내용으로 덮어써집니다.\n" +
+      "・백업 이후 새로 추가된 항목은 삭제되지 않고 그대로 남습니다.\n" +
+      "・되돌릴 수 없는 작업이니 신중히 진행하세요."
+    );
+    if (!ok) return;
+    setBusy("restore");
+    try {
+      await restoreBackup(file);
+      alert("복원이 완료되었습니다. 화면을 새로고침합니다.");
+      window.location.reload();
+    } catch (err) {
+      alert("복원 오류: " + err.message);
+      setBusy("");
+    }
+  };
+
   const goCalendar = (date) => {
     setCalDate(date);
     setTab("calendar");
@@ -1422,6 +1464,10 @@ function App() {
           <button className="btn-ghost" onClick={handleBackup} disabled={busy === "backup"}>
             {busy === "backup" ? "백업 중…" : "🗂 전체백업"}
           </button>
+          <label className="btn-ghost upload-inline" title="백업 JSON 파일로 복원">
+            {busy === "restore" ? "복원 중…" : "⬆ 복원"}
+            <input type="file" accept=".json,application/json" onChange={handleRestore} disabled={busy === "restore"} hidden />
+          </label>
           <button
             className="btn-ghost"
             onClick={() => { localStorage.removeItem("promo_access_hash"); setAuthed(false); }}
