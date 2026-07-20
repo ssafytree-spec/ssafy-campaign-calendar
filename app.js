@@ -5,10 +5,14 @@ const supabase = window.supabase.createClient(
   window.APP_CONFIG.SUPABASE_URL,
   window.APP_CONFIG.SUPABASE_ANON_KEY
 );
-const ACCESS_CODE = window.APP_CONFIG.ACCESS_CODE || "ssafy16";
+const ACCESS_CODE_HASH = (window.APP_CONFIG.ACCESS_CODE_HASH || "").toLowerCase();
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 const STATUS = ["대기", "진행중", "완료"];
 const MSG_STATUS = ["초안", "발송대기", "발송완료"];
-const CHANNELS = ["문자", "카카오 알림톡", "공지사항"];
+const CHANNELS = ["문자", "카카오 알림톡", "이메일", "공지사항"];
 
 // ---- 공용 헬퍼 --------------------------------------------------
 function fmtDate(d) {
@@ -27,6 +31,9 @@ function smsBytes(s) {
   for (const ch of s || "") b += ch.charCodeAt(0) > 127 ? 2 : 1;
   return b;
 }
+function isImageFile(name) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(name || "");
+}
 function subscribeTables(tables, onChange) {
   const channel = supabase.channel("db-" + tables.join("-") + "-" + Math.random().toString(36).slice(2, 7));
   tables.forEach((t) =>
@@ -40,14 +47,18 @@ function subscribeTables(tables, onChange) {
 function Gate({ onPass }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  const submit = () => {
-    if (code.trim() === ACCESS_CODE) {
-      localStorage.setItem("promo_access", code.trim());
+  const submit = async () => {
+    setChecking(true);
+    const hash = await sha256Hex(code.trim());
+    if (hash === ACCESS_CODE_HASH) {
+      localStorage.setItem("promo_access_hash", hash);
       onPass();
     } else {
       setError(true);
     }
+    setChecking(false);
   };
 
   return (
@@ -65,14 +76,16 @@ function Gate({ onPass }) {
           autoFocus
         />
         {error && <div className="gate-error">접속코드가 맞지 않습니다. 다시 확인해주세요.</div>}
-        <button className="btn-primary" onClick={submit}>입장하기</button>
+        <button className="btn-primary" onClick={submit} disabled={checking}>
+          {checking ? "확인 중…" : "입장하기"}
+        </button>
       </div>
     </div>
   );
 }
 
 // ---- 항목 상세 모달 (연결된 일정 역방향 표시 포함) ------------------
-function TaskModal({ task, isNew, campaignId, onClose, onGoCalendar }) {
+function TaskModal({ task, isNew, campaignId, categories, onClose, onGoCalendar }) {
   const [form, setForm] = useState({ ...task, schedule_date: task.schedule_date || "" });
   const [logs, setLogs] = useState([]);
   const [files, setFiles] = useState([]);
@@ -170,8 +183,18 @@ function TaskModal({ task, isNew, campaignId, onClose, onGoCalendar }) {
         </div>
 
         <div className="form-grid">
-          <label>대구분 *<input value={form.category_main} onChange={set("category_main")} placeholder="예: 대외협력 홍보(고용노동부 등)" /></label>
-          <label>소구분<input value={form.category_sub} onChange={set("category_sub")} placeholder="예: 배너" /></label>
+          <label>대구분 *
+            <input list="cat-main-list" value={form.category_main} onChange={set("category_main")} placeholder="예: 대외협력 홍보(고용노동부 등)" />
+            <datalist id="cat-main-list">
+              {categories.mains.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </label>
+          <label>소구분
+            <input list="cat-sub-list" value={form.category_sub} onChange={set("category_sub")} placeholder="예: 배너" />
+            <datalist id="cat-sub-list">
+              {categories.subs.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </label>
           <label>항목 *<input value={form.item_name} onChange={set("item_name")} placeholder="예: 고용노동부 : 배너 홍보" /></label>
           <label>시행일정<input type="date" value={form.schedule_date} onChange={set("schedule_date")} /></label>
           <label>상태
@@ -179,8 +202,8 @@ function TaskModal({ task, isNew, campaignId, onClose, onGoCalendar }) {
               {STATUS.map((s) => <option key={s}>{s}</option>)}
             </select>
           </label>
-          <label>협업담당<input value={form.owner} onChange={set("owner")} placeholder="쉼표로 여러 명 입력" /></label>
-          <label>협력담당<input value={form.partner} onChange={set("partner")} placeholder="쉼표로 여러 명 입력" /></label>
+          <label>전자담당<input value={form.owner} onChange={set("owner")} placeholder="쉼표로 여러 명 입력" /></label>
+          <label>멀캠담당<input value={form.partner} onChange={set("partner")} placeholder="쉼표로 여러 명 입력" /></label>
           <label className="full">세부내용<textarea rows={3} value={form.detail} onChange={set("detail")}></textarea></label>
         </div>
 
@@ -200,8 +223,8 @@ function TaskModal({ task, isNew, campaignId, onClose, onGoCalendar }) {
                 <ul className="link-list">
                   {linkedEvents.map((ev) => (
                     <li key={"e" + ev.id}>
-                      <span className={"ev-type " + (ev.event_type === "오프라인" ? "off" : "on")}>{ev.event_type}</span>
-                      <b>{fmtDate(ev.event_date)}</b> {ev.title}
+                      <span className={"ev-type " + eventTypeClass(ev.event_type)}>{ev.event_type}</span>
+                      <b>{fmtDate(ev.event_date)}</b> {ev.is_important && "⭐"} {ev.title}
                       {ev.location && <span className="dim"> · {ev.location}</span>}
                       {onGoCalendar && <button className="btn-mini" onClick={() => { onClose(); onGoCalendar(ev.event_date); }}>캘린더에서 보기</button>}
                     </li>
@@ -301,6 +324,11 @@ function StatusBoard({ campaignId, onGoCalendar }) {
     return true;
   }), [tasks, fStatus, fPerson]);
 
+  const categories = useMemo(() => ({
+    mains: [...new Set(tasks.map((t) => t.category_main).filter(Boolean))],
+    subs: [...new Set(tasks.map((t) => t.category_sub).filter(Boolean))],
+  }), [tasks]);
+
   const groups = useMemo(() => {
     const map = new Map();
     filtered.forEach((t) => {
@@ -358,8 +386,8 @@ function StatusBoard({ campaignId, onGoCalendar }) {
                   <th style={{ width: 200 }}>항목</th>
                   <th>세부내용</th>
                   <th style={{ width: 70 }}>일정</th>
-                  <th style={{ width: 130 }}>협업담당</th>
-                  <th style={{ width: 150 }}>협력담당</th>
+                  <th style={{ width: 130 }}>전자담당</th>
+                  <th style={{ width: 150 }}>멀캠담당</th>
                 </tr>
               </thead>
               <tbody>
@@ -391,6 +419,7 @@ function StatusBoard({ campaignId, onGoCalendar }) {
           task={creating ? EMPTY_TASK : selected}
           isNew={creating}
           campaignId={campaignId}
+          categories={categories}
           onGoCalendar={onGoCalendar}
           onClose={() => { setSelected(null); setCreating(false); load(); }}
         />
@@ -402,6 +431,11 @@ function StatusBoard({ campaignId, onGoCalendar }) {
 // ---- 캘린더 (일정 + 문자발송 통합 표시) -----------------------------
 function pad(n) { return String(n).padStart(2, "0"); }
 function dkey(y, m, d) { return `${y}-${pad(m)}-${pad(d)}`; }
+function eventTypeClass(type) {
+  if (type === "오프라인") return "off";
+  if (type === "일반") return "general";
+  return "on";
+}
 
 function CalendarView({ campaignId, initialDate }) {
   const today = new Date();
@@ -467,6 +501,7 @@ function CalendarView({ campaignId, initialDate }) {
       title: form.title.trim(),
       location: form.location,
       note: form.note,
+      is_important: !!form.is_important,
       related_task_id: form.related_task_id || null,
     };
     if (form.id) await supabase.from("events").update(payload).eq("id", form.id);
@@ -515,9 +550,9 @@ function CalendarView({ campaignId, initialDate }) {
                 {items.slice(0, 3).map((it) => (
                   <span
                     key={it.kind + it.id}
-                    className={"cal-ev " + (it.kind === "msg" ? "msg" : it.event_type === "오프라인" ? "off" : "on")}
+                    className={"cal-ev " + (it.kind === "msg" ? "msg" : eventTypeClass(it.event_type)) + (it.is_important ? " important" : "")}
                   >
-                    {it.kind === "msg" ? "✉ " : ""}{it.title}
+                    {it.kind === "msg" ? "✉ " : it.is_important ? "⭐ " : ""}{it.title}
                   </span>
                 ))}
                 {items.length > 3 && <span className="cal-more">+{items.length - 3}</span>}
@@ -535,22 +570,22 @@ function CalendarView({ campaignId, initialDate }) {
               <h3>{selDate}</h3>
               <button
                 className="btn-primary"
-                onClick={() => setForm({ event_date: selDate, event_type: "온라인", title: "", location: "", note: "", related_task_id: "" })}
+                onClick={() => setForm({ event_date: selDate, event_type: "온라인", title: "", location: "", note: "", related_task_id: "", is_important: false })}
               >
                 + 일정 추가
               </button>
             </div>
             {selItems.length === 0 && <div className="empty small">이 날짜에는 일정이 없습니다.</div>}
             {selItems.map((it) => it.kind === "event" ? (
-              <div key={"e" + it.id} className="ev-card">
+              <div key={"e" + it.id} className={"ev-card" + (it.is_important ? " important-card" : "")}>
                 <div className="ev-top">
-                  <span className={"ev-type " + (it.event_type === "오프라인" ? "off" : "on")}>{it.event_type}</span>
+                  <span className={"ev-type " + eventTypeClass(it.event_type)}>{it.event_type}</span>
                   <div>
                     <button className="btn-mini" onClick={() => setForm({ ...it, related_task_id: it.related_task_id || "" })}>수정</button>
                     <button className="btn-mini danger" onClick={() => removeEvent(it.id)}>삭제</button>
                   </div>
                 </div>
-                <div className="ev-title">{it.title}</div>
+                <div className="ev-title">{it.is_important && <span className="star">⭐</span>}{it.title}</div>
                 {it.location && <div className="ev-meta">📍 {it.location}</div>}
                 {it.note && <div className="ev-meta">{it.note}</div>}
                 {it.related_task_id && (
@@ -584,8 +619,12 @@ function CalendarView({ campaignId, initialDate }) {
               <label>날짜<input type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} /></label>
               <label>구분
                 <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })}>
-                  <option>온라인</option><option>오프라인</option>
+                  <option>온라인</option><option>오프라인</option><option>일반</option>
                 </select>
+              </label>
+              <label className="check-label full">
+                <input type="checkbox" checked={!!form.is_important} onChange={(e) => setForm({ ...form, is_important: e.target.checked })} />
+                ⭐ 중요 일정으로 표시
               </label>
               <label className="full">내용 *<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="예: 모집설명회" /></label>
               <label>장소<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
@@ -817,6 +856,7 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
   const [changeNote, setChangeNote] = useState("");
   const [logs, setLogs] = useState([]);
   const [files, setFiles] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]); // 신규 작성 중 첨부 대기 파일
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tasks, setTasks] = useState([]);
@@ -855,7 +895,23 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
     };
     if (isNew) {
       payload.campaign_id = campaignId;
-      await supabase.from("messages").insert(payload);
+      const { data, error } = await supabase.from("messages").insert(payload).select().single();
+      if (error) {
+        alert("저장 실패: " + error.message);
+        setSaving(false);
+        return;
+      }
+      // 대기 중이던 첨부파일 업로드
+      for (const file of pendingFiles) {
+        const path = `messages/${data.id}/${Date.now()}_${file.name}`;
+        const { error: upErr } = await supabase.storage.from("files").upload(path, file);
+        if (!upErr) {
+          const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
+          await supabase.from("message_files").insert({
+            message_id: data.id, file_name: file.name, file_url: pub.publicUrl,
+          });
+        }
+      }
     } else {
       // 내용이 바뀌었으면 이전 내용을 이력으로 저장
       if (form.content !== msg.content) {
@@ -886,6 +942,13 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
     await supabase.from("messages").update({ archived: false }).eq("id", msg.id);
     onClose();
   };
+
+  const addPending = (e) => {
+    const file = e.target.files?.[0];
+    if (file) setPendingFiles((prev) => [...prev, file]);
+    e.target.value = "";
+  };
+  const removePending = (idx) => setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const upload = async (e) => {
     const file = e.target.files?.[0];
@@ -964,6 +1027,29 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
           </button>
         </div>
 
+        {isNew && (
+          <React.Fragment>
+            <hr />
+            <h3>첨부파일 (알림톡 시안, 사진 등)</h3>
+            <label className="upload-btn">
+              + 사진/파일 추가
+              <input type="file" onChange={addPending} hidden />
+            </label>
+            {pendingFiles.length === 0 && <div className="empty small">저장하면 함께 업로드됩니다.</div>}
+            <ul className="file-thumbs">
+              {pendingFiles.map((f, i) => (
+                <li key={i}>
+                  {isImageFile(f.name)
+                    ? <img src={URL.createObjectURL(f)} alt={f.name} />
+                    : <span className="file-icon">📎</span>}
+                  <span className="thumb-name">{f.name}</span>
+                  <button className="btn-mini danger" onClick={() => removePending(i)}>제거</button>
+                </li>
+              ))}
+            </ul>
+          </React.Fragment>
+        )}
+
         {!isNew && (
           <React.Fragment>
             <hr />
@@ -982,16 +1068,19 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
               ))}
             </ul>
 
-            <h3>첨부파일 (알림톡 시안 등)</h3>
+            <h3>첨부파일 (알림톡 시안, 사진 등)</h3>
             <label className="upload-btn">
-              {uploading ? "업로드 중…" : "+ 파일 업로드"}
+              {uploading ? "업로드 중…" : "+ 사진/파일 추가"}
               <input type="file" onChange={upload} disabled={uploading} hidden />
             </label>
             {files.length === 0 && <div className="empty small">첨부된 파일이 없습니다.</div>}
-            <ul className="file-list">
+            <ul className="file-thumbs">
               {files.map((f) => (
                 <li key={f.id}>
-                  <a href={f.file_url} target="_blank" rel="noreferrer">{f.file_name}</a>
+                  {isImageFile(f.file_name)
+                    ? <a href={f.file_url} target="_blank" rel="noreferrer"><img src={f.file_url} alt={f.file_name} /></a>
+                    : <span className="file-icon">📎</span>}
+                  <a className="thumb-name" href={f.file_url} target="_blank" rel="noreferrer">{f.file_name}</a>
                   <span className="log-time">{fmtDateTime(f.uploaded_at)}</span>
                 </li>
               ))}
@@ -1136,10 +1225,11 @@ async function exportToExcel(campaignId, campaignName) {
   const tasksSheet = (tasksRes.data || []).map((t) => ({
     "대구분": t.category_main, "소구분": t.category_sub, "항목": t.item_name,
     "세부내용": t.detail, "상태": t.status, "시행일정": t.schedule_date || "",
-    "협업담당": t.owner, "협력담당": t.partner,
+    "전자담당": t.owner, "멀캠담당": t.partner,
   }));
   const eventsSheet = (eventsRes.data || []).map((e) => ({
-    "날짜": e.event_date, "구분": e.event_type, "내용": e.title, "장소": e.location, "비고": e.note,
+    "날짜": e.event_date, "구분": e.event_type, "중요": e.is_important ? "★" : "",
+    "내용": e.title, "장소": e.location, "비고": e.note,
   }));
   const staffSheet = (staffRes.data || []).map((s) => ({
     "일정": s.event_date, "시간": s.time_range, "권역": s.region, "장소": s.place,
@@ -1201,7 +1291,7 @@ const TABS = [
 
 function App() {
   const [authed, setAuthed] = useState(
-    localStorage.getItem("promo_access") === ACCESS_CODE
+    localStorage.getItem("promo_access_hash") === ACCESS_CODE_HASH && ACCESS_CODE_HASH !== ""
   );
   const [campaigns, setCampaigns] = useState(null); // null = 로딩중
   const [currentId, setCurrentId] = useState(null);
@@ -1334,7 +1424,7 @@ function App() {
           </button>
           <button
             className="btn-ghost"
-            onClick={() => { localStorage.removeItem("promo_access"); setAuthed(false); }}
+            onClick={() => { localStorage.removeItem("promo_access_hash"); setAuthed(false); }}
           >
             나가기
           </button>

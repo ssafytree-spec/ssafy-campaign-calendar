@@ -552,3 +552,54 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
   .campaign-banner { padding: 6px 14px; }
   .topbar-right { margin-left: auto; }
 }
+
+/* ---- v3: PWA / 카테고리 자동완성 / 첨부이미지 / 캘린더 확장 ---- */
+
+/* 캘린더: 일반 일정 색상 + 중요 표시 */
+.cal-ev.general { background: #fff4e0; color: #b5680b; }
+.cal-ev.important { border: 1px solid #e0a300; font-weight: 700; }
+.ev-type.general { background: #fff4e0; color: #b5680b; }
+.important-card { border-left: 3px solid #e0a300; background: #fffaf0; }
+.star { margin-right: 3px; }
+
+/* 첨부파일 썸네일 목록 (사진 미리보기) */
+.file-thumbs {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.file-thumbs li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  text-align: center;
+}
+.file-thumbs img {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.file-icon {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  background: #f6f8f2;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.thumb-name {
+  font-size: 11px;
+  color: var(--ink-dim);
+  max-width: 96px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
