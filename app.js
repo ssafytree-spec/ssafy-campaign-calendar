@@ -224,7 +224,8 @@ function TaskModal({ task, isNew, campaignId, categories, onClose, onGoCalendar 
                   {linkedEvents.map((ev) => (
                     <li key={"e" + ev.id}>
                       <span className={"ev-type " + eventTypeClass(ev.event_type)}>{ev.event_type}</span>
-                      <b>{fmtDate(ev.event_date)}</b> {ev.is_important && "⭐"} {ev.title}
+                      {ev.is_important && <span className="important-chip small">⭐</span>}
+                      <b>{fmtDate(ev.event_date)}</b> {ev.title}
                       {ev.location && <span className="dim"> · {ev.location}</span>}
                       {onGoCalendar && <button className="btn-mini" onClick={() => { onClose(); onGoCalendar(ev.event_date); }}>캘린더에서 보기</button>}
                     </li>
@@ -540,19 +541,21 @@ function CalendarView({ campaignId, initialDate }) {
             if (!d) return <div key={"e" + i} className="cal-cell empty-cell" />;
             const k = dkey(ym.y, ym.m, d);
             const items = byDate[k] || [];
+            const hasImportant = items.some((it) => it.is_important);
             return (
               <button
                 key={k}
                 className={"cal-cell" + (k === todayKey ? " today" : "") + (k === selDate ? " sel" : "")}
                 onClick={() => setSelDate(k)}
               >
+                {hasImportant && <span className="cell-star" title="중요 일정 있음">⭐</span>}
                 <span className="cal-day">{d}</span>
                 {items.slice(0, 3).map((it) => (
                   <span
                     key={it.kind + it.id}
                     className={"cal-ev " + (it.kind === "msg" ? "msg" : eventTypeClass(it.event_type)) + (it.is_important ? " important" : "")}
                   >
-                    {it.kind === "msg" ? "✉ " : it.is_important ? "⭐ " : ""}{it.title}
+                    {it.kind === "msg" ? "✉ " : ""}{it.title}
                   </span>
                 ))}
                 {items.length > 3 && <span className="cal-more">+{items.length - 3}</span>}
@@ -579,13 +582,16 @@ function CalendarView({ campaignId, initialDate }) {
             {selItems.map((it) => it.kind === "event" ? (
               <div key={"e" + it.id} className={"ev-card" + (it.is_important ? " important-card" : "")}>
                 <div className="ev-top">
-                  <span className={"ev-type " + eventTypeClass(it.event_type)}>{it.event_type}</span>
+                  <div className="ev-badges">
+                    <span className={"ev-type " + eventTypeClass(it.event_type)}>{it.event_type}</span>
+                    {it.is_important && <span className="important-chip">⭐ 중요</span>}
+                  </div>
                   <div>
                     <button className="btn-mini" onClick={() => setForm({ ...it, related_task_id: it.related_task_id || "" })}>수정</button>
                     <button className="btn-mini danger" onClick={() => removeEvent(it.id)}>삭제</button>
                   </div>
                 </div>
-                <div className="ev-title">{it.is_important && <span className="star">⭐</span>}{it.title}</div>
+                <div className="ev-title">{it.title}</div>
                 {it.location && <div className="ev-meta">📍 {it.location}</div>}
                 {it.note && <div className="ev-meta">{it.note}</div>}
                 {it.related_task_id && (

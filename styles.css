@@ -555,12 +555,37 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
 
 /* ---- v3: PWA / 카테고리 자동완성 / 첨부이미지 / 캘린더 확장 ---- */
 
-/* 캘린더: 일반 일정 색상 + 중요 표시 */
+/* 캘린더: 일반 일정 색상 */
 .cal-ev.general { background: #fff4e0; color: #b5680b; }
-.cal-ev.important { border: 1px solid #e0a300; font-weight: 700; }
 .ev-type.general { background: #fff4e0; color: #b5680b; }
+
+/* 중요 표시: 셀 우측 상단 배지 + 이벤트 알약 좌측 강조선 */
+.cal-cell { position: relative; }
+.cell-star {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 11px;
+  line-height: 1;
+}
+.cal-ev.important {
+  border-left: 3px solid #e0a300;
+  padding-left: 4px;
+  font-weight: 700;
+}
+
+/* 상세 카드 중요 표시 */
 .important-card { border-left: 3px solid #e0a300; background: #fffaf0; }
-.star { margin-right: 3px; }
+.ev-badges { display: flex; align-items: center; gap: 6px; }
+.important-chip {
+  background: #fff4d6;
+  color: #a5730a;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.important-chip.small { padding: 1px 6px; font-size: 10px; }
 
 /* 첨부파일 썸네일 목록 (사진 미리보기) */
 .file-thumbs {
