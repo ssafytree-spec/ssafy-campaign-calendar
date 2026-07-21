@@ -470,6 +470,27 @@ function eventTypeClass(type) {
   if (type === "일반") return "general";
   return "on";
 }
+// 캘린더 항목 종류별 표시 규칙
+function itemClass(it) {
+  if (it.kind === "msg") return "msg";
+  if (it.kind === "task") return "task";
+  if (it.kind === "staff") return "staff";
+  if (it.kind === "timeline") return "tl";
+  return eventTypeClass(it.event_type);
+}
+function itemIcon(it) {
+  if (it.kind === "msg") return "✉ ";
+  if (it.kind === "task") return "📋 ";
+  if (it.kind === "staff") return "👥 ";
+  if (it.kind === "timeline") return "⏱ ";
+  return "";
+}
+function itemLabel(it) {
+  if (it.kind === "task") return it.item_name;
+  if (it.kind === "staff") return it.place;
+  if (it.kind === "timeline") return `당일 순서 ${it.count}건`;
+  return it.title;
+}
 
 function CalendarView({ campaignId, initialDate }) {
   const today = new Date();
@@ -478,39 +499,60 @@ function CalendarView({ campaignId, initialDate }) {
   const [events, setEvents] = useState([]);
   const [msgs, setMsgs] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [timeline, setTimeline] = useState([]);
   const [selDate, setSelDate] = useState(initialDate || null);
   const [form, setForm] = useState(null);
-  const [filter, setFilter] = useState("전체"); // 전체 | 일정만 | 문자만
+  const [filter, setFilter] = useState("전체");
 
   const load = async () => {
-    const [e, m, t] = await Promise.all([
+    const [e, m, t, st, tl] = await Promise.all([
       supabase.from("events").select("*").eq("campaign_id", campaignId).order("event_date"),
       supabase.from("messages").select("id,title,send_date,status,channel").eq("campaign_id", campaignId).eq("archived", false).not("send_date", "is", null),
-      supabase.from("tasks").select("id,item_name").eq("campaign_id", campaignId).order("id"),
+      supabase.from("tasks").select("*").eq("campaign_id", campaignId).order("id"),
+      supabase.from("staff_assignments").select("*").eq("campaign_id", campaignId),
+      supabase.from("timeline_items").select("*").eq("campaign_id", campaignId),
     ]);
     setEvents(e.data || []);
     setMsgs(m.data || []);
     setTasks(t.data || []);
+    setStaff(st.data || []);
+    setTimeline(tl.data || []);
   };
 
   useEffect(() => {
     load();
-    return subscribeTables(["events", "messages"], load);
+    return subscribeTables(["events", "messages", "tasks", "staff_assignments", "timeline_items"], load);
   }, [campaignId]);
 
-  const showEvents = filter !== "문자만";
-  const showMsgs = filter !== "일정만";
+  const showEvents = filter === "전체" || filter === "일정";
+  const showMsgs = filter === "전체" || filter === "문자";
+  const showTasks = filter === "전체" || filter === "현황판";
+  const showStaff = filter === "전체" || filter === "인력배정";
+  const showTl = filter === "전체" || filter === "D-Day";
 
   const byDate = useMemo(() => {
     const map = {};
-    if (showEvents) events.forEach((ev) => {
-      (map[ev.event_date] = map[ev.event_date] || []).push({ kind: "event", ...ev });
-    });
-    if (showMsgs) msgs.forEach((m) => {
-      (map[m.send_date] = map[m.send_date] || []).push({ kind: "msg", ...m });
-    });
+    const push = (date, item) => {
+      if (!date) return;
+      (map[date] = map[date] || []).push(item);
+    };
+    if (showEvents) events.forEach((ev) => push(ev.event_date, { kind: "event", ...ev }));
+    if (showMsgs) msgs.forEach((m) => push(m.send_date, { kind: "msg", ...m }));
+    if (showTasks) tasks.forEach((t) => push(t.schedule_date, { kind: "task", ...t }));
+    if (showStaff) staff.forEach((s) => push(s.event_date, { kind: "staff", ...s }));
+    if (showTl) {
+      // D-Day 타임라인은 날짜별로 묶어서 1건으로 표시
+      const grouped = {};
+      timeline.forEach((t) => {
+        (grouped[t.event_date] = grouped[t.event_date] || []).push(t);
+      });
+      Object.entries(grouped).forEach(([date, items]) => {
+        push(date, { kind: "timeline", id: "tl-" + date, count: items.length, items });
+      });
+    }
     return map;
-  }, [events, msgs, showEvents, showMsgs]);
+  }, [events, msgs, tasks, staff, timeline, filter]);
 
   const first = new Date(ym.y, ym.m - 1, 1);
   const startDow = first.getDay();
@@ -561,7 +603,7 @@ function CalendarView({ campaignId, initialDate }) {
           <h2>{ym.y}년 {ym.m}월</h2>
           <button className="btn-ghost" onClick={() => move(1)}>▶</button>
           <div className="cal-filter">
-            {["전체", "일정만", "문자만"].map((f) => (
+            {["전체", "일정", "문자", "현황판", "인력배정", "D-Day"].map((f) => (
               <button key={f} className={filter === f ? "chip active" : "chip"} onClick={() => setFilter(f)}>{f}</button>
             ))}
           </div>
@@ -583,18 +625,27 @@ function CalendarView({ campaignId, initialDate }) {
               >
                 {hasImportant && <span className="cell-star" title="중요 일정 있음">⭐</span>}
                 <span className="cal-day">{d}</span>
-                {items.slice(0, 3).map((it) => (
+                {items.slice(0, 4).map((it) => (
                   <span
                     key={it.kind + it.id}
-                    className={"cal-ev " + (it.kind === "msg" ? "msg" : eventTypeClass(it.event_type)) + (it.is_important ? " important" : "")}
+                    className={"cal-ev " + itemClass(it) + (it.is_important ? " important" : "")}
                   >
-                    {it.kind === "msg" ? "✉ " : ""}{it.title}
+                    {itemIcon(it)}{itemLabel(it)}
                   </span>
                 ))}
-                {items.length > 3 && <span className="cal-more">+{items.length - 3}</span>}
+                {items.length > 4 && <span className="cal-more">+{items.length - 4}</span>}
               </button>
             );
           })}
+        </div>
+        <div className="cal-legend">
+          <span><i className="lg on"></i>온라인</span>
+          <span><i className="lg off"></i>오프라인</span>
+          <span><i className="lg general"></i>일반</span>
+          <span><i className="lg msg"></i>문자</span>
+          <span><i className="lg task"></i>현황판</span>
+          <span><i className="lg staff"></i>인력배정</span>
+          <span><i className="lg tl"></i>D-Day</span>
         </div>
       </div>
 
@@ -612,37 +663,82 @@ function CalendarView({ campaignId, initialDate }) {
               </button>
             </div>
             {selItems.length === 0 && <div className="empty small">이 날짜에는 일정이 없습니다.</div>}
-            {selItems.map((it) => it.kind === "event" ? (
-              <div key={"e" + it.id} className={"ev-card" + (it.is_important ? " important-card" : "")}>
-                <div className="ev-top">
-                  <div className="ev-badges">
-                    <span className={"ev-type " + eventTypeClass(it.event_type)}>{it.event_type}</span>
-                    {it.is_important && <span className="important-chip">⭐ 중요</span>}
+            {selItems.map((it) => {
+              if (it.kind === "event") return (
+                <div key={"e" + it.id} className={"ev-card" + (it.is_important ? " important-card" : "")}>
+                  <div className="ev-top">
+                    <div className="ev-badges">
+                      <span className={"ev-type " + eventTypeClass(it.event_type)}>{it.event_type}</span>
+                      {it.is_important && <span className="important-chip">⭐ 중요</span>}
+                    </div>
+                    <div>
+                      <button className="btn-mini" onClick={() => setForm({ ...it, related_task_id: it.related_task_id || "" })}>수정</button>
+                      <button className="btn-mini danger" onClick={() => removeEvent(it.id)}>삭제</button>
+                    </div>
                   </div>
-                  <div>
-                    <button className="btn-mini" onClick={() => setForm({ ...it, related_task_id: it.related_task_id || "" })}>수정</button>
-                    <button className="btn-mini danger" onClick={() => removeEvent(it.id)}>삭제</button>
-                  </div>
+                  <div className="ev-title">{it.title}</div>
+                  {it.location && <div className="ev-meta">📍 {it.location}</div>}
+                  {it.note && <div className="ev-meta">{it.note}</div>}
+                  {it.related_task_id && (
+                    <div className="ev-meta link">
+                      🔗 {tasks.find((t) => t.id === it.related_task_id)?.item_name || "연결된 항목"}
+                    </div>
+                  )}
                 </div>
-                <div className="ev-title">{it.title}</div>
-                {it.location && <div className="ev-meta">📍 {it.location}</div>}
-                {it.note && <div className="ev-meta">{it.note}</div>}
-                {it.related_task_id && (
-                  <div className="ev-meta link">
-                    🔗 {tasks.find((t) => t.id === it.related_task_id)?.item_name || "연결된 항목"}
+              );
+              if (it.kind === "msg") return (
+                <div key={"m" + it.id} className="ev-card msg-card">
+                  <div className="ev-top">
+                    <span className="ev-type msg-badge">✉ {it.channel}</span>
+                    <span className={"status-inline s-" + it.status}>{it.status}</span>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div key={"m" + it.id} className="ev-card msg-card">
-                <div className="ev-top">
-                  <span className="ev-type msg-badge">✉ {it.channel}</span>
-                  <span className={"status-inline s-" + it.status}>{it.status}</span>
+                  <div className="ev-title">{it.title}</div>
+                  <div className="ev-meta dim">공지/문자 탭에서 내용 확인·수정</div>
                 </div>
-                <div className="ev-title">{it.title}</div>
-                <div className="ev-meta dim">공지/문자 탭에서 내용 확인·수정</div>
-              </div>
-            ))}
+              );
+              if (it.kind === "task") return (
+                <div key={"t" + it.id} className="ev-card task-card">
+                  <div className="ev-top">
+                    <span className="ev-type task-badge">📋 현황판</span>
+                    <span className={"status-inline s-" + it.status}>{it.status}</span>
+                  </div>
+                  <div className="ev-title">{it.item_name}</div>
+                  <div className="ev-meta dim">{it.category_main}{it.category_sub ? " · " + it.category_sub : ""}</div>
+                  {(it.owner || it.partner) && (
+                    <div className="ev-meta dim">전자 {it.owner || "-"} / 멀캠 {it.partner || "-"}</div>
+                  )}
+                </div>
+              );
+              if (it.kind === "staff") return (
+                <div key={"s" + it.id} className="ev-card staff-card">
+                  <div className="ev-top">
+                    <span className="ev-type staff-badge">👥 인력배정</span>
+                    {it.time_range && <span className="dim">{it.time_range}</span>}
+                  </div>
+                  <div className="ev-title">{it.place}{it.sub_place ? ` · ${it.sub_place}` : ""}</div>
+                  <div className="ev-meta dim">
+                    {it.region && `${it.region} · `}{it.capacity ? `정원 ${it.capacity}명` : ""}
+                  </div>
+                  {it.host_name && <div className="ev-meta dim">운영: {it.host_name}</div>}
+                </div>
+              );
+              if (it.kind === "timeline") return (
+                <div key={it.id} className="ev-card tl-card">
+                  <div className="ev-top">
+                    <span className="ev-type tl-badge">⏱ D-Day 타임라인</span>
+                  </div>
+                  <ol className="tl-mini">
+                    {it.items.sort((a, b) => (a.order_no || 0) - (b.order_no || 0)).map((x) => (
+                      <li key={x.id}>
+                        <b>{x.order_no}</b> {x.content}
+                        {x.location && <span className="dim"> · {x.location}</span>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              );
+              return null;
+            })}
           </React.Fragment>
         )}
       </aside>

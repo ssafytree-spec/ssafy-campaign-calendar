@@ -547,6 +547,18 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
   white-space: nowrap;
 }
 .check-label input { width: auto; }
+.form-grid label.check-label {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+}
+.form-grid label.check-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+}
 
 @media (max-width: 820px) {
   .campaign-banner { padding: 6px 14px; }
@@ -676,11 +688,74 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
 .combo-list li.combo-empty:hover { background: none; }
 
 /* 캘린더 폼 맨 위 중요 체크박스 강조 */
+.form-grid label.check-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
 .important-check {
   background: #fff8e6;
   border: 1px solid #f0d68a;
   border-radius: 8px;
-  padding: 9px 12px !important;
+  padding: 10px 12px !important;
   font-weight: 700;
   color: #a5730a;
+  cursor: pointer;
 }
+.important-check input { width: 17px; height: 17px; flex: none; accent-color: #e0a300; }
+
+/* ---- v5: 캘린더 통합 표시 (현황판/인력배정/D-Day) ---------------- */
+.cal-ev.task  { background: #e8f2fb; color: #2f6ca8; }
+.cal-ev.staff { background: #fdeef4; color: #b4477c; }
+.cal-ev.tl    { background: #eeeef8; color: #5a5a9c; }
+.task-badge   { background: #e8f2fb; color: #2f6ca8; }
+.staff-badge  { background: #fdeef4; color: #b4477c; }
+.tl-badge     { background: #eeeef8; color: #5a5a9c; }
+.task-card    { border-left: 3px solid #7fb0dd; }
+.staff-card   { border-left: 3px solid #e39ec1; }
+.tl-card      { border-left: 3px solid #9a9ad4; }
+
+/* 셀 여백 및 밀도 조정 */
+.cal-cell { min-height: 96px; gap: 2px; }
+.cal-ev { line-height: 1.45; }
+
+/* 범례 */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.lg {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.lg.on { background: var(--green-pale); border: 1px solid #b6d98a; }
+.lg.off { background: #eef3fc; border: 1px solid #a9c4ea; }
+.lg.general { background: #fff4e0; border: 1px solid #edc98d; }
+.lg.msg { background: #f0eafc; border: 1px solid #bda6ea; }
+.lg.task { background: #e8f2fb; border: 1px solid #7fb0dd; }
+.lg.staff { background: #fdeef4; border: 1px solid #e39ec1; }
+.lg.tl { background: #eeeef8; border: 1px solid #9a9ad4; }
+
+/* 사이드 D-Day 미니 리스트 */
+.tl-mini { list-style: none; margin-top: 4px; }
+.tl-mini li {
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.tl-mini li:last-child { border-bottom: none; }
+.tl-mini b { color: #5a5a9c; margin-right: 4px; }
+
+/* 필터 칩이 많아져서 줄바꿈 허용 */
+.cal-filter { flex-wrap: wrap; }
