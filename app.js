@@ -44,6 +44,35 @@ function subscribeTables(tables, onChange) {
 }
 
 // ---- 접속코드 게이트 ---------------------------------------------
+// ---- 콤보박스: 기존 값 검색/선택 + 새 값 직접 입력 -----------------------
+function ComboBox({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const filtered = options.filter((o) =>
+    o.toLowerCase().includes((value || "").toLowerCase())
+  );
+  return (
+    <div className="combo">
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      <span className="combo-caret">▾</span>
+      {open && options.length > 0 && (
+        <ul className="combo-list">
+          {filtered.length > 0
+            ? filtered.map((o) => (
+                <li key={o} onMouseDown={() => { onChange(o); setOpen(false); }}>{o}</li>
+              ))
+            : <li className="combo-empty">일치하는 항목 없음 (새로 입력하면 추가됩니다)</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Gate({ onPass }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
@@ -184,16 +213,20 @@ function TaskModal({ task, isNew, campaignId, categories, onClose, onGoCalendar 
 
         <div className="form-grid">
           <label>대구분 *
-            <input list="cat-main-list" value={form.category_main} onChange={set("category_main")} placeholder="예: 대외협력 홍보(고용노동부 등)" />
-            <datalist id="cat-main-list">
-              {categories.mains.map((c) => <option key={c} value={c} />)}
-            </datalist>
+            <ComboBox
+              value={form.category_main}
+              onChange={(v) => setForm((f) => ({ ...f, category_main: v }))}
+              options={categories.mains}
+              placeholder="예: 대외협력 홍보(고용노동부 등)"
+            />
           </label>
           <label>소구분
-            <input list="cat-sub-list" value={form.category_sub} onChange={set("category_sub")} placeholder="예: 배너" />
-            <datalist id="cat-sub-list">
-              {categories.subs.map((c) => <option key={c} value={c} />)}
-            </datalist>
+            <ComboBox
+              value={form.category_sub}
+              onChange={(v) => setForm((f) => ({ ...f, category_sub: v }))}
+              options={categories.subs}
+              placeholder="예: 배너"
+            />
           </label>
           <label>항목 *<input value={form.item_name} onChange={set("item_name")} placeholder="예: 고용노동부 : 배너 홍보" /></label>
           <label>시행일정<input type="date" value={form.schedule_date} onChange={set("schedule_date")} /></label>
@@ -622,15 +655,15 @@ function CalendarView({ campaignId, initialDate }) {
               <button className="btn-ghost" onClick={() => setForm(null)}>닫기 ✕</button>
             </div>
             <div className="form-grid">
+              <label className="check-label full important-check">
+                <input type="checkbox" checked={!!form.is_important} onChange={(e) => setForm({ ...form, is_important: e.target.checked })} />
+                ⭐ 중요 일정으로 표시
+              </label>
               <label>날짜<input type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} /></label>
               <label>구분
                 <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })}>
                   <option>온라인</option><option>오프라인</option><option>일반</option>
                 </select>
-              </label>
-              <label className="check-label full">
-                <input type="checkbox" checked={!!form.is_important} onChange={(e) => setForm({ ...form, is_important: e.target.checked })} />
-                ⭐ 중요 일정으로 표시
               </label>
               <label className="full">내용 *<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="예: 모집설명회" /></label>
               <label>장소<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} /></label>
@@ -985,10 +1018,12 @@ function MessageModal({ msg, isNew, campaignId, categories, onClose }) {
 
         <div className="form-grid">
           <label>카테고리 *
-            <input list="msg-cats" value={form.category} onChange={set("category")} placeholder="예: 모집홍보 문자" />
-            <datalist id="msg-cats">
-              {categories.map((c) => <option key={c} value={c} />)}
-            </datalist>
+            <ComboBox
+              value={form.category}
+              onChange={(v) => setForm((f) => ({ ...f, category: v }))}
+              options={categories}
+              placeholder="예: 모집홍보 문자"
+            />
           </label>
           <label>이름 *<input value={form.title} onChange={set("title")} placeholder="예: 4/13 1차 발송분" /></label>
           <label>채널

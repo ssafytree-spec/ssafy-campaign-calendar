@@ -635,3 +635,52 @@ details summary { cursor: pointer; color: var(--green-dark); font-size: 12px; }
   align-items: center;
   cursor: pointer;
 }
+
+/* 콤보박스 (대구분/소구분/카테고리 검색+선택+신규입력) */
+.combo { position: relative; }
+.combo input { padding-right: 28px; }
+.combo-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-dim);
+  font-size: 11px;
+  pointer-events: none;
+}
+.combo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  list-style: none;
+}
+.combo-list li {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.combo-list li:hover { background: var(--green-pale); }
+.combo-list li.combo-empty {
+  color: var(--ink-dim);
+  cursor: default;
+  font-size: 12px;
+}
+.combo-list li.combo-empty:hover { background: none; }
+
+/* 캘린더 폼 맨 위 중요 체크박스 강조 */
+.important-check {
+  background: #fff8e6;
+  border: 1px solid #f0d68a;
+  border-radius: 8px;
+  padding: 9px 12px !important;
+  font-weight: 700;
+  color: #a5730a;
+}
